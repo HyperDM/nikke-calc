@@ -11,8 +11,10 @@
  * * **방어력은 뺀다** — 딜 덱에서 아무도 쓰지 않는다.
  * * **차지 속도·차지 대미지는 차지 무기만** 본다 — 무기가 SR·RL이거나, 무기 변경으로
  *   SR·RL을 드는 니케. 나머지에게는 효과가 없다.
- * * **우월 코드 4줄·공격력 4줄은 기본으로 고정**한다(많은 니케가 그렇게 맞춘다). 그러면
- *   부위마다 남는 한 줄, 곧 4줄만 고르면 된다. 고정을 풀면 그 옵션도 0~4줄 중에서 고른다.
+ * * **기본 줄**을 먼저 깐다 — 처음엔 우월 코드 4줄·공격력 4줄(많은 니케가 그렇게 맞춘다).
+ *   그러면 부위마다 남는 한 줄, 곧 4줄만 고르면 된다. 기본 줄은 사람이 옵션마다 0~4줄로 바꿀
+ *   수 있고(4우3공·4우2장…, 유저 요청 2026-09-27) **최소치**다 — 남은 줄에 같은 옵션을 더
+ *   얹는 것도 후보다(3공이면 4공째도 본다).
  * * 모든 줄은 **같은 레벨**로 본다. 옵션 표는 레벨마다 비율이 같아 순위는 거의 안 바뀐다.
  */
 import type { EquipPart } from './types';
@@ -32,33 +34,54 @@ export const MAX_PER_OPTION = PARTS.length;
 export type Allocation = Record<string, number>;
 
 export interface OptimizerSetup {
-  /** 우월 코드 4줄 고정. */
-  fixElement: boolean;
-  /** 공격력 4줄 고정. */
-  fixAtk: boolean;
+  /** 기본 줄 — 옵션마다 최소 몇 줄. 합이 12를 넘으면 계산하지 않는다. */
+  fixed: Allocation;
   /** 차지 무기인가 — 아니면 차속·차댐을 고르지 않는다. */
   charge: boolean;
 }
+
+/** 처음 여는 기본 줄 — 우월 코드 4 · 공격력 4. */
+export const DEFAULT_FIXED: Allocation = { element_bonus: MAX_PER_OPTION, atk_pct: MAX_PER_OPTION };
+
+/** 이 니케가 고를 수 있는 옵션(차지 무기가 아니면 차속·차댐 제외). */
+export const allowedOptions = (charge: boolean): string[] =>
+  OPTIMIZER_OPTIONS.filter((key) => charge || !CHARGE_OPTIONS.has(key));
 
 /** 무기가 차지 무기인가 — 기본 무기나 무기 변경으로 드는 무기 중 SR·RL이 있으면. */
 export const isChargeWeapon = (weaponType: string | undefined, changes: readonly string[] = []): boolean =>
   [weaponType ?? '', ...changes].some((type) => type === 'SR' || type === 'RL');
 
+/** 기본 줄을 고를 수 있는 옵션·0~4줄 정수로 다듬는다(0줄은 뺀다). */
 export function fixedAllocation(setup: OptimizerSetup): Allocation {
-  return {
-    ...(setup.fixElement ? { element_bonus: MAX_PER_OPTION } : {}),
-    ...(setup.fixAtk ? { atk_pct: MAX_PER_OPTION } : {}),
-  };
+  const out: Allocation = {};
+  for (const key of allowedOptions(setup.charge)) {
+    const count = Math.max(0, Math.min(MAX_PER_OPTION, Math.trunc(Number(setup.fixed[key]) || 0)));
+    if (count > 0) out[key] = count;
+  }
+  return out;
 }
 
-/** 고정 줄을 뺀 나머지 줄에서 고를 옵션. */
-export function freeOptions(setup: OptimizerSetup): string[] {
+export const fixedLineCount = (setup: OptimizerSetup): number =>
+  Object.values(fixedAllocation(setup)).reduce((a, b) => a + b, 0);
+
+/** 기본 줄 합이 12줄 안인가. */
+export const fixedFits = (setup: OptimizerSetup): boolean => fixedLineCount(setup) <= TOTAL_LINES;
+
+/** 남은 줄에 더 얹을 수 있는 옵션과 그 여유(4 − 기본 줄). */
+function capsOf(setup: OptimizerSetup): Array<[string, number]> {
   const fixed = fixedAllocation(setup);
-  return OPTIMIZER_OPTIONS.filter((key) => !(key in fixed) && (setup.charge || !CHARGE_OPTIONS.has(key)));
+  return allowedOptions(setup.charge)
+    .map((key): [string, number] => [key, MAX_PER_OPTION - (fixed[key] ?? 0)])
+    .filter(([, cap]) => cap > 0);
+}
+
+/** 남은 줄에서 고를 옵션. */
+export function freeOptions(setup: OptimizerSetup): string[] {
+  return capsOf(setup).map(([key]) => key);
 }
 
 export function freeLines(setup: OptimizerSetup): number {
-  return TOTAL_LINES - Object.values(fixedAllocation(setup)).reduce((a, b) => a + b, 0);
+  return Math.max(0, TOTAL_LINES - fixedLineCount(setup));
 }
 
 const choose = (n: number, k: number): number => {
@@ -78,26 +101,41 @@ export function countAllocations(n: number, k: number, cap = MAX_PER_OPTION): nu
   return total;
 }
 
-/** 이 설정으로 돌릴 조합 수(지금 줄로 한 번 재는 기준 판은 빼고). */
-export const countFor = (setup: OptimizerSetup): number =>
-  countAllocations(freeOptions(setup).length, freeLines(setup));
+/**
+ * 이 설정으로 돌릴 조합 수(지금 줄로 한 번 재는 기준 판은 빼고). 옵션마다 여유가 달라
+ * (기본 3줄이면 1줄만 더) 한 줄씩 쌓아 센다. 기본 줄이 12줄을 넘으면 0이다.
+ */
+export function countFor(setup: OptimizerSetup): number {
+  if (!fixedFits(setup)) return 0;
+  const lines = freeLines(setup);
+  let ways: number[] = Array.from({ length: lines + 1 }, (_, k) => (k === 0 ? 1 : 0));
+  for (const [, cap] of capsOf(setup)) {
+    const next: number[] = Array.from({ length: lines + 1 }, () => 0);
+    for (let used = 0; used <= lines; used += 1) {
+      const here = ways[used] ?? 0;
+      if (!here) continue;
+      for (let add = 0; add <= cap && used + add <= lines; add += 1) next[used + add] = (next[used + add] ?? 0) + here;
+    }
+    ways = next;
+  }
+  return ways[lines] ?? 0;
+}
 
-/** 고정 줄 + 옵션마다 몇 줄 — 가능한 조합 전부. */
+/** 기본 줄 + 남은 줄 — 가능한 조합 전부. */
 export function enumerateAllocations(setup: OptimizerSetup): Allocation[] {
-  const options = freeOptions(setup);
+  if (!fixedFits(setup)) return [];
+  const caps = capsOf(setup);
   const fixed = fixedAllocation(setup);
   const out: Allocation[] = [];
   const pick = (index: number, left: number, acc: Allocation) => {
-    if (index === options.length - 1) {
-      if (left <= MAX_PER_OPTION) out.push({ ...fixed, ...acc, ...(left > 0 ? { [options[index]!]: left } : {}) });
-      return;
-    }
-    for (let n = Math.min(MAX_PER_OPTION, left); n >= 0; n -= 1) {
-      pick(index + 1, left - n, n > 0 ? { ...acc, [options[index]!]: n } : acc);
+    if (left === 0) { out.push({ ...acc }); return; }
+    if (index >= caps.length) return;
+    const [key, cap] = caps[index]!;
+    for (let n = Math.min(cap, left); n >= 0; n -= 1) {
+      pick(index + 1, left - n, n > 0 ? { ...acc, [key]: (acc[key] ?? 0) + n } : acc);
     }
   };
-  if (options.length === 0) return freeLines(setup) === 0 ? [{ ...fixed }] : [];
-  pick(0, freeLines(setup), {});
+  pick(0, freeLines(setup), { ...fixed });
   return out;
 }
 
@@ -168,11 +206,23 @@ export const FAST_BEAM = 3;
 export const allocationKey = (allocation: Allocation): string =>
   OPTIMIZER_OPTIONS.map((key) => allocation[key] ?? 0).join(',');
 
-/** 빠른 탐색 1단계의 조합 — 우월·공격력 4줄 고정. */
-export const seedSetup = (setup: OptimizerSetup): OptimizerSetup => ({ ...setup, fixElement: true, fixAtk: true });
+/**
+ * 빠른 탐색 1단계의 조합 — 기본 줄에 우월·공격력 4줄을 더 깐 판(흔한 답이 모인 곳). 그렇게 깔면
+ * 12줄을 넘으면 기본 줄 그대로다.
+ */
+export function seedSetup(setup: OptimizerSetup): OptimizerSetup {
+  const fixed = fixedAllocation(setup);
+  const seeded: Allocation = { ...fixed };
+  for (const [key, count] of Object.entries(DEFAULT_FIXED)) seeded[key] = Math.max(seeded[key] ?? 0, count);
+  const next = { ...setup, fixed: seeded };
+  return fixedFits(next) ? next : { ...setup, fixed };
+}
 
-/** 한 줄 또는 두 줄을 옵션 A에서 B로 옮긴 조합들. 고정된 옵션은 건드리지 않는다. */
-export function neighborsOf(allocation: Allocation, options: string[]): Allocation[] {
+/**
+ * 한 줄 또는 두 줄을 옵션 A에서 B로 옮긴 조합들. 기본 줄(`fixed`) 아래로는 빼지 않는다 —
+ * 기본 줄 위에 얹힌 줄만 옮긴다.
+ */
+export function neighborsOf(allocation: Allocation, options: string[], fixed: Allocation = {}): Allocation[] {
   const out = new Map<string, Allocation>();
   for (const from of options) {
     for (const to of options) {
@@ -180,7 +230,7 @@ export function neighborsOf(allocation: Allocation, options: string[]): Allocati
       for (const move of [1, 2]) {
         const have = allocation[from] ?? 0;
         const room = MAX_PER_OPTION - (allocation[to] ?? 0);
-        if (have < move || room < move) continue;
+        if (have - (fixed[from] ?? 0) < move || room < move) continue;
         const next: Allocation = { ...allocation, [to]: (allocation[to] ?? 0) + move };
         if (have === move) delete next[from];
         else next[from] = have - move;
@@ -246,12 +296,14 @@ export async function fastSearch(
 
   await measure(enumerateAllocations(seedSetup(setup)), { stage: 1, round: 0 });
   let top = topOf();
-  const options = freeOptions(setup);
+  // 옮길 수 있는 옵션 — 기본 줄 위에 얹힌 줄이 있거나 여유가 있는 옵션 전부.
+  const options = allowedOptions(setup.charge);
+  const fixed = fixedAllocation(setup);
   let rounds = 0;
   let converged = false;
   while (top.length && rounds < FAST_MAX_ROUNDS) {
     rounds += 1;
-    await measure(top.flatMap((entry) => neighborsOf(entry.allocation, options)), { stage: 2, round: rounds });
+    await measure(top.flatMap((entry) => neighborsOf(entry.allocation, options, fixed)), { stage: 2, round: rounds });
     const next = topOf();
     if (sameTop(next, top)) { converged = true; break; }
     top = next;

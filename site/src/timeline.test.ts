@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildDeckComparisonSeries, createTimelineComparison, buildSeries, createTimelineBlock, formatSpan, niceMax, buffRuns, buffTextPlan } from './timeline';
+import { buildDeckComparisonSeries, createTimelineComparison, buildSeries, createTimelineBlock, formatSpan, niceMax, buffRuns, buffTextPlan, cumulativeAt, checkpointTimes } from './timeline';
 import { spanTargets } from './types';
 import type { BattleTimeline, BuffTrack, DeckResultEntry } from './types';
 
@@ -238,6 +238,42 @@ describe('niceMax', () => {
     expect(niceMax(200)).toBe(200);
     expect(niceMax(230)).toBe(250);
     expect(niceMax(1_800_000)).toBe(2_000_000);
+  });
+});
+
+describe('누적 딜 — 리트 기준', () => {
+  it('0초부터 t초까지 더하고, 걸친 칸은 칸 길이 비율로 나눈다', () => {
+    const series = buildSeries(timeline, ['라피', '크라운'], 4)!;
+    expect(cumulativeAt(series, 2).라피).toBe(100);
+    expect(cumulativeAt(series, 2.5).라피).toBeCloseTo(200);
+    expect(cumulativeAt(series, 99).라피).toBe(350);
+    expect(cumulativeAt(series, 0).라피).toBe(0);
+    expect(cumulativeAt(series, 3).크라운).toBe(0);
+  });
+
+  it('보스 패턴 시점은 페이즈 구간의 시작이고, 같은 시각은 하나로 묶는다', () => {
+    const series = buildSeries(timeline, ['라피'], 4, {
+      immuneWindows: [{ from: 1.5, to: 2 }], coreWindows: [{ from: 0, to: 4 }],
+      distanceWindows: [{ from: 1.5, to: 3, distance: 22 }],
+    })!;
+    expect(checkpointTimes(series)).toEqual([{ t: 1.5, label: '족자 시작 · 거리 22' }]);
+  });
+
+  it('시점을 넣거나 패턴 칩을 누르면 누적 딜이 나오고, 덱을 바꿔 그려도 시점을 기억한다', () => {
+    const phased: DeckResultEntry = { ...entry, request: { ...entry.request, immuneWindows: [{ from: 3, to: 3.5 }] } };
+    const block = createTimelineBlock(phased)!;
+    const panel = block.querySelector<HTMLElement>('[data-timeline-checkpoint]')!;
+    expect(panel.querySelector('[data-checkpoint-result]')?.textContent).toContain('누적 딜이 나옵니다');
+    panel.querySelector<HTMLButtonElement>('[data-checkpoint-at="3"]')!.click();
+    const result = panel.querySelector('[data-checkpoint-result]')!.textContent!;
+    expect(result).toContain('0–3초 누적');
+    expect(result).toContain('300');
+    expect(result).toContain('전체의 85.7%');
+    // 새로 그린 블록(다른 덱 탭)도 같은 시점으로 연다.
+    const again = createTimelineBlock(entry)!;
+    expect(again.querySelector<HTMLInputElement>('[data-checkpoint-time]')!.value).toBe('3');
+    again.querySelector<HTMLButtonElement>('[data-checkpoint-clear]')!.click();
+    expect(again.querySelector<HTMLInputElement>('[data-checkpoint-time]')!.value).toBe('');
   });
 });
 

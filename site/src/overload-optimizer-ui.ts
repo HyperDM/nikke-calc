@@ -9,7 +9,8 @@ import { formatDamage } from './model';
 import { t, tName } from './i18n';
 import { LabStopped, mapLimit, type LabRun, type LabRunner } from './deck-lab';
 import {
-  allocationKey, allocationLabel, arrangeLines, countFor, durationLabel, enumerateAllocations, fastBudget,
+  allocationKey, allocationLabel, allowedOptions, arrangeLines, countFor, DEFAULT_FIXED, durationLabel,
+  enumerateAllocations, fastBudget, fixedAllocation, fixedLineCount, MAX_PER_OPTION, TOTAL_LINES,
   fastSearch, FAST_BEAM, fastTypical, freeOptions, isChargeWeapon, PARTS, progressOf, seedSetup,
   totalsOf, type Allocation, type OptimizerSetup,
 } from './overload-optimizer';
@@ -22,8 +23,30 @@ import type { DeckState, SettingsCatalog } from './types';
 export const RUN_LIMIT = 2500;
 /** 조합이 이보다 많으면 처음부터 빠른 탐색을 고른다(전수는 수 분). */
 export const FAST_DEFAULT_OVER = 500;
+/** 기본 줄을 이 브라우저에 기억해 두는 자리 — 늘 4우2장으로 맞추는 사람은 매번 고치지 않게. */
+export const FIXED_KEY = 'nikke-overload-best-fixed-v1';
+
+function loadFixed(): Allocation {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FIXED_KEY) ?? 'null') as unknown;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const out: Allocation = {};
+      for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+        const count = Math.trunc(Number(value));
+        if (Number.isFinite(count) && count > 0) out[key] = Math.min(MAX_PER_OPTION, count);
+      }
+      return out;
+    }
+  } catch { /* 저장소를 못 쓰면 기본값으로 */ }
+  return { ...DEFAULT_FIXED };
+}
+
+function saveFixed(fixed: Allocation): void {
+  try { localStorage.setItem(FIXED_KEY, JSON.stringify(fixed)); } catch { /* 못 적어도 이번 창은 그대로 쓴다 */ }
+}
+
 /** 줄 레벨 기본값. */
-export const DEFAULT_LINE_LEVEL = 11;
+export const DEFAULT_LINE_LEVEL = 15;
 /** 결과 표에 늘어놓는 조합 수. */
 export const TOP_ROWS = 10;
 
@@ -100,26 +123,54 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
     charge
       ? t('차지 무기(SR·RL, 무기 변경 포함)라 차지 속도·차지 대미지도 고릅니다.')
       : t('차지 무기(SR·RL, 무기 변경 포함)가 아니라 차지 속도·차지 대미지는 고르지 않습니다.'),
-    t('모든 줄은 같은 레벨로 봅니다. 옵션 표는 레벨마다 비율이 같아 순위는 거의 바뀌지 않습니다.'),
+    t('모든 줄을 «줄 레벨»에서 고른 한 레벨(기본 Lv15)로 가정해 계산합니다. 지금 줄도 그 레벨로 다시 재서 견주므로, 레벨 차이 없이 옵션 구성만 비교합니다.'),
     t('전투 조건은 지금 화면 값을 쓰고, 난수는 기대값으로 고정합니다.'),
   ]) rules.append(el('li', '', line));
   card.append(rules);
 
+  // 기본 줄 — 옵션마다 최소 몇 줄을 깔고 시작할지. 처음엔 4우 4공이고, 4우3공·4우2장처럼
+  // 자유롭게 바꾼다(유저 요청 2026-09-27). 남은 줄에 같은 옵션을 더 얹는 것도 후보다.
+  const fixedBox = el('div', 'ob-fixed');
+  fixedBox.dataset.overloadBestFixed = '';
+  const fixedHead = el('div', 'ob-fixed-head');
+  fixedHead.append(el('b', '', t('기본 줄')));
+  const fixedSum = el('span', 'ob-fixed-sum');
+  fixedSum.dataset.overloadBestFixedSum = '';
+  fixedHead.append(fixedSum);
+  const presetDefault = el('button', 'ob-fixed-preset', t('4우 4공'));
+  presetDefault.type = 'button';
+  presetDefault.dataset.overloadBestPreset = 'default';
+  const presetClear = el('button', 'ob-fixed-preset', t('비우기'));
+  presetClear.type = 'button';
+  presetClear.dataset.overloadBestPreset = 'clear';
+  fixedHead.append(presetDefault, presetClear);
+  fixedBox.append(fixedHead);
+  const fixedGrid = el('div', 'ob-fixed-grid');
+  const fixedInputs = new Map<string, HTMLSelectElement>();
+  const saved = loadFixed();
+  for (const key of allowedOptions(charge)) {
+    const cell = el('label', 'ob-fixed-cell');
+    cell.append(el('span', '', labelOf(key)));
+    const pick = el('select');
+    pick.dataset.overloadBestFix = key;
+    pick.setAttribute('aria-label', t('{option} 기본 줄 수', { option: labelOf(key) }));
+    for (let n = 0; n <= MAX_PER_OPTION; n += 1) {
+      const option = el('option', '', n === 0 ? '—' : `${n}`);
+      option.value = String(n);
+      pick.append(option);
+    }
+    pick.value = String(saved[key] ?? 0);
+    cell.append(pick);
+    fixedGrid.append(cell);
+    fixedInputs.set(key, pick);
+  }
+  fixedBox.append(fixedGrid);
+  fixedBox.append(el('p', 'deck-lab-notes ob-fixed-note', t('기본 줄은 먼저 깔고 남은 줄만 계산합니다. 최소치라 남은 줄에 같은 옵션을 더 얹는 것도 봅니다(3공이면 4공째도 후보).')));
+  card.append(fixedBox);
+
   const options = el('div', 'ob-options');
-  const check = (label: string, key: string) => {
-    const box = el('label', 'ob-check');
-    const input = el('input');
-    input.type = 'checkbox';
-    input.checked = true;
-    input.dataset.overloadBestFix = key;
-    box.append(input, el('span', '', label));
-    options.append(box);
-    return input;
-  };
-  const fixElement = check(t('우월 코드 4줄 기본'), 'element');
-  const fixAtk = check(t('공격력 4줄 기본'), 'atk');
   const levelBox = el('label', 'ob-check');
-  levelBox.append(el('span', '', t('줄 레벨')));
+  levelBox.append(el('span', '', t('줄 레벨 (전부)')));
   const level = el('select');
   level.dataset.overloadBestLevel = '';
   for (let n = 1; n <= 15; n += 1) {
@@ -179,10 +230,26 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
   let runToken = 0;
   let closed = false;
   /** 지금 줄로 잰 한 판과 걸린 시간. 예상 시간과 «지금 줄 대비»의 기준. */
-  let baseline: { result: LabRun; ms: number } | null = null;
+  let baseline: { result: LabRun; ms: number; level: number } | null = null;
   let baselineError = '';
+  /** 지금 줄의 옵션 구성 — 줄 정보가 있으면 이걸 고른 레벨로 다시 재서 기준으로 삼는다. */
+  const currentAllocation = ((): Allocation | null => {
+    const lines = context.deck.characters[context.name]?.overloadLines;
+    if (!lines) return null;
+    const out: Allocation = {};
+    for (const part of PARTS) {
+      for (const line of lines[part] ?? []) if (line?.option) out[line.option] = (out[line.option] ?? 0) + 1;
+    }
+    return Object.keys(out).length ? out : null;
+  })();
 
-  const setup = (): OptimizerSetup => ({ fixElement: fixElement.checked, fixAtk: fixAtk.checked, charge });
+  const readFixed = (): Allocation => Object.fromEntries([...fixedInputs.entries()]
+    .map(([key, pick]) => [key, Number(pick.value)] as [string, number]).filter(([, n]) => n > 0));
+  const setup = (): OptimizerSetup => ({ fixed: readFixed(), charge });
+  const setFixed = (fixed: Allocation) => {
+    for (const [key, pick] of fixedInputs) pick.value = String(Math.min(MAX_PER_OPTION, fixed[key] ?? 0));
+    onFixedChange();
+  };
   const estimate = (runs: number): string => {
     if (!baseline) return baselineError ? '' : t('예상 시간 재는 중…');
     const lanes = Math.max(1, deps.parallel());
@@ -190,47 +257,66 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
       time: durationLabel((Math.ceil(runs / lanes) * baseline.ms) / 1000), n: lanes,
     });
   };
-  /** 고정을 바꿀 때마다 계산 방식을 알맞게 다시 고른다 — 전수가 너무 길면 빠른 탐색. */
+  /** 기본 줄을 바꿀 때마다 계산 방식을 알맞게 다시 고른다 — 전수가 너무 길면 빠른 탐색. */
   const pickMode = () => {
-    const now = setup();
-    const n = countFor(now);
-    const both = now.fixElement && now.fixAtk;
-    modeBox.hidden = both;
+    const n = countFor(setup());
+    // 전수가 금방 끝나면 고를 일이 없다.
+    modeBox.hidden = n <= FAST_DEFAULT_OVER;
     exactOption.disabled = n > RUN_LIMIT;
-    mode.value = both || n <= FAST_DEFAULT_OVER ? 'exact' : 'fast';
+    mode.value = n <= FAST_DEFAULT_OVER ? 'exact' : 'fast';
   };
   const fastMode = (): boolean => !modeBox.hidden && mode.value === 'fast';
   const paint = () => {
     const now = setup();
+    const used = fixedLineCount(now);
+    const tooMany = used > TOTAL_LINES;
     const n = countFor(now);
-    const over = n > RUN_LIMIT && !fastMode();
-    const lines = 12 - (now.fixElement ? 4 : 0) - (now.fixAtk ? 4 : 0);
+    const over = !tooMany && n > RUN_LIMIT && !fastMode();
+    const lines = TOTAL_LINES - used;
     const list = freeOptions(now).map(labelOf).join(' · ');
-    if (fastMode()) {
+    fixedSum.textContent = t('{used} / {total}줄 · 남은 {left}줄 계산', { used, total: TOTAL_LINES, left: Math.max(0, lines) });
+    fixedSum.classList.toggle('is-over', tooMany);
+    if (tooMany) {
+      count.textContent = t('기본 줄이 {used}줄이라 12줄을 넘습니다. 줄 수를 줄여 주세요.', { used });
+    } else if (lines === 0) {
+      count.textContent = `${t('기본 줄이 12줄을 다 채워 고를 줄이 없습니다 — 그 조합 하나만 잽니다.')} ${estimate(1)}`;
+    } else if (fastMode()) {
       const seed = countFor(seedSetup(now));
+      const seedLabel = allocationLabel(fixedAllocation(seedSetup(now)), labelOf) || t('기본 줄');
       const typical = fastTypical(now);
-      count.textContent = `${t('조합 {n}개 — 빠른 탐색: 1단계로 우월 코드·공격력 4줄 조합 {seed}개를 전부 잰 뒤, 2단계로 지금까지 상위 {beam}개 조합에서 한두 줄씩 다른 옵션({list})으로 옮겨 보며 상위가 더 바뀌지 않을 때까지 찾습니다.', {
-        n: n.toLocaleString('ko-KR'), seed, list, beam: FAST_BEAM,
+      count.textContent = `${t('조합 {n}개 — 빠른 탐색: 1단계로 {seedLabel}을 깐 조합 {seed}개를 전부 잰 뒤, 2단계로 지금까지 상위 {beam}개 조합에서 한두 줄씩 다른 옵션({list})으로 옮겨 보며 상위가 더 바뀌지 않을 때까지 찾습니다.', {
+        n: n.toLocaleString('ko-KR'), seed, seedLabel, list, beam: FAST_BEAM,
       })} ${t('보통 {typ}판 이하 · 최대 {max}판 · {eta}', {
         typ: typical.toLocaleString('ko-KR'), eta: estimate(typical), max: fastBudget(now).toLocaleString('ko-KR'),
       })}`;
     } else {
       count.textContent = over
-        ? t('조합 {n}개 — {max}개를 넘어 전수 계산하지 않습니다. 빠른 탐색을 쓰거나 고정을 켜 주세요.', { n: n.toLocaleString('ko-KR'), max: RUN_LIMIT.toLocaleString('ko-KR') })
+        ? t('조합 {n}개 — {max}개를 넘어 전수 계산하지 않습니다. 빠른 탐색을 쓰거나 기본 줄을 늘려 주세요.', { n: n.toLocaleString('ko-KR'), max: RUN_LIMIT.toLocaleString('ko-KR') })
         : `${t('조합 {n}개를 계산합니다 — 남은 {lines}줄을 {m}가지 옵션({list})에서 고릅니다.', {
           n: n.toLocaleString('ko-KR'), lines, m: freeOptions(now).length, list,
         })} ${estimate(n)}`;
     }
-    count.classList.toggle('is-over', over);
-    const variant = (fixE: boolean, fixA: boolean) => countFor({ fixElement: fixE, fixAtk: fixA, charge }).toLocaleString('ko-KR');
-    more.textContent = t('고정을 풀면 계산이 늘어납니다: 둘 다 고정 {both}개 · 우월 코드만 풀면 {e}개 · 공격력만 풀면 {a}개 · 둘 다 풀면 {none}개', {
-      both: variant(true, true), e: variant(false, true), a: variant(true, false), none: variant(false, false),
+    count.classList.toggle('is-over', over || tooMany);
+    const variant = (fixed: Allocation) => countFor({ fixed, charge }).toLocaleString('ko-KR');
+    more.textContent = t('기본 줄이 적을수록 조합이 늘어납니다: 4우 4공 {both}개 · 4우만 {e}개 · 기본 줄 없음 {none}개', {
+      both: variant(DEFAULT_FIXED), e: variant({ element_bonus: MAX_PER_OPTION }), none: variant({}),
     });
-    start.disabled = running || over || !baseline;
+    start.disabled = running || over || tooMany || !baseline;
   };
-  fixElement.addEventListener('change', () => { pickMode(); paint(); });
-  fixAtk.addEventListener('change', () => { pickMode(); paint(); });
+  function onFixedChange(): void {
+    saveFixed(readFixed());
+    pickMode();
+    paint();
+  }
+  for (const pick of fixedInputs.values()) pick.addEventListener('change', onFixedChange);
+  presetDefault.addEventListener('click', () => setFixed(DEFAULT_FIXED));
+  presetClear.addEventListener('click', () => setFixed({}));
   mode.addEventListener('change', paint);
+  /** 계산 중에는 설정을 잠근다. */
+  const lockInputs = (locked: boolean) => {
+    for (const pick of fixedInputs.values()) pick.disabled = locked;
+    presetDefault.disabled = presetClear.disabled = level.disabled = mode.disabled = locked;
+  };
 
   const dismiss = () => {
     if (closed) return;
@@ -249,23 +335,51 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
   document.addEventListener('keydown', onKey, true);
   stop.addEventListener('click', () => { stopped = true; stop.disabled = true; });
 
-  const deckWith = (allocation: Allocation): DeckState => {
+  const deckWith = (allocation: Allocation, lineLevel = Number(level.value)): DeckState => {
     const deck = structuredClone(context.deck);
     const own = deck.characters[context.name] ?? {};
-    deck.characters[context.name] = { ...own, overload: totalsOf(allocation, steps, Number(level.value), fields) };
+    deck.characters[context.name] = { ...own, overload: totalsOf(allocation, steps, lineLevel, fields) };
     return deck;
   };
 
+  // 지금 줄 — 후보와 **같은 레벨**로 다시 잰다(유저 요청 2026-09-27: 지금 옵션 Lv15 vs 바뀐 옵션 Lv15).
+  // 줄 정보가 없으면(수치만 직접 넣었다) 입력된 수치 그대로 잰다.
+  const currentNote = el('p', 'deck-lab-notes ob-current');
+  currentNote.dataset.overloadBestCurrent = '';
+  fixedBox.before(currentNote);
+  const paintCurrent = () => {
+    currentNote.textContent = currentAllocation
+      ? t('지금 줄: {lines} — 모두 Lv{n} 기준으로 다시 재서 비교 기준으로 삼습니다.', {
+        // 방어력처럼 고르지 않는 옵션도 지금 줄에는 있을 수 있다 — 설정 표 순서로 전부 적는다.
+        lines: fields.filter((key) => (currentAllocation[key] ?? 0) > 0)
+          .map((key) => `${labelOf(key)} ${currentAllocation[key]}`).join(' · '), n: level.value,
+      })
+      : t('지금 줄: 줄 단위 정보가 없어(수치만 입력) 입력된 수치 그대로 기준으로 삼습니다.');
+  };
+  /** 기준 판을 잰다. 레벨을 바꾸면 다시 잰다 — 늦게 온 옛 레벨 결과는 버린다. */
+  const measureBaseline = () => {
+    const lineLevel = Number(level.value);
+    baseline = null;
+    baselineError = '';
+    paintCurrent();
+    paint();
+    const began = performance.now();
+    const deck = currentAllocation ? deckWith(currentAllocation, lineLevel) : structuredClone(context.deck);
+    void deps.run(deck).then((result) => {
+      if (closed || Number(level.value) !== lineLevel) return;
+      baseline = { result, ms: Math.max(1, performance.now() - began), level: lineLevel };
+      paint();
+    }, (error: unknown) => {
+      if (closed || Number(level.value) !== lineLevel) return;
+      baselineError = error instanceof Error ? error.message : String(error);
+      status.textContent = t('계산할 수 없는 편성입니다: {msg}', { msg: baselineError });
+      paint();
+    });
+  };
+  level.addEventListener('change', () => { output.replaceChildren(); status.textContent = ''; measureBaseline(); });
+
   pickMode();
-  paint();
-  const began = performance.now();
-  void deps.run(structuredClone(context.deck)).then((result) => {
-    baseline = { result, ms: Math.max(1, performance.now() - began) };
-    if (!closed) paint();
-  }, (error: unknown) => {
-    baselineError = error instanceof Error ? error.message : String(error);
-    if (!closed) { status.textContent = t('계산할 수 없는 편성입니다: {msg}', { msg: baselineError }); paint(); }
-  });
+  measureBaseline();
 
   start.addEventListener('click', () => { void runAll(); });
 
@@ -281,7 +395,7 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
     start.disabled = true;
     stop.hidden = false;
     stop.disabled = false;
-    fixElement.disabled = fixAtk.disabled = level.disabled = mode.disabled = true;
+    lockInputs(true);
     bar.hidden = false;
     bar.value = 0;
     output.replaceChildren();
@@ -329,7 +443,7 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
     } finally {
       running = false;
       stop.hidden = true;
-      fixElement.disabled = fixAtk.disabled = level.disabled = mode.disabled = false;
+      lockInputs(false);
       if (!closed) paint();
     }
   }
@@ -395,7 +509,7 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
     } finally {
       running = false;
       stop.hidden = true;
-      fixElement.disabled = fixAtk.disabled = level.disabled = mode.disabled = false;
+      lockInputs(false);
       if (!closed) paint();
     }
   }
@@ -409,7 +523,9 @@ export function openOverloadOptimizer(deps: OptimizerDeps, context: OptimizerCon
     const base = baseline.result;
     const summary = el('div', 'ob-best');
     summary.dataset.overloadBestResult = '';
-    summary.append(el('h3', '', t('최적 조합 · 줄 레벨 Lv{n}', { n: level.value })));
+    summary.append(el('h3', '', currentAllocation
+      ? t('최적 조합 · 모든 줄 Lv{n} (지금 줄도 같은 Lv{n} 기준)', { n: level.value })
+      : t('최적 조합 · 모든 줄 Lv{n}', { n: level.value })));
     summary.append(el('p', 'ob-best-label', allocationLabel(best.allocation, labelOf)));
     const totals = el('p', 'deck-lab-summary');
     totals.append(el('b', '', t('덱 총딜 {value}', { value: formatDamage(best.total) })),

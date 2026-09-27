@@ -199,6 +199,53 @@ export function formatSpan(index: number, bucket: number): string {
   return `${from.toFixed(digits)}–${(from + bucket).toFixed(digits)}초`;
 }
 
+/**
+ * 0초부터 `t`초까지의 누적 대미지(캐릭터별). 칸 하나에 걸친 부분은 칸 길이 비율로 나눈다 —
+ * 칸 안에서 딜이 고르게 들어갔다고 보는 근사라, 1초 칸이면 오차는 한 칸 몫 이내다.
+ *
+ * 「중간에 리트할 기준」을 잡으려는 요청(피드백 2026-09-27)에서 왔다 — 전투 끝의 합계만으로는
+ * «60초에 이만큼 못 넣었으면 다시 한다»를 정할 수 없다.
+ */
+export function cumulativeAt(series: TimelineSeries, t: number): Record<string, number> {
+  const end = Math.max(0, Math.min(t, series.duration));
+  const bucket = series.bucket;
+  const out: Record<string, number> = {};
+  for (const name of series.names) {
+    const row = series.damage[name] ?? [];
+    let sum = 0;
+    for (let index = 0; index < row.length; index += 1) {
+      const from = index * bucket;
+      if (from >= end) break;
+      const to = Math.min(from + bucket, series.duration);
+      const value = row[index] ?? 0;
+      sum += end >= to ? value : value * ((end - from) / Math.max(1e-9, to - from));
+    }
+    out[name] = sum;
+  }
+  return out;
+}
+
+/** 누적을 볼 만한 보스 패턴 시점 — 페이즈 구간의 시작(0초 제외). 같은 시각은 하나로 묶는다. */
+export function checkpointTimes(series: TimelineSeries): Array<{ t: number; label: string }> {
+  const marks: Array<{ t: number; label: string }> = [];
+  const add = (from: number, label: string) => {
+    if (from > 0 && from < series.duration) marks.push({ t: Math.round(from * 10) / 10, label });
+  };
+  for (const w of series.immuneWindows) add(w.from, '족자 시작');
+  for (const w of series.elementWindows) add(w.from, '속저 시작');
+  for (const w of series.coreWindows) add(w.from, '코어 노출');
+  for (const w of series.distanceWindows) add(w.from, `거리 ${w.distance}`);
+  for (const w of series.optimalRangeWindows) add(w.from, '적정거리 변경');
+  for (const w of series.defenseRateWindows) add(w.from, '방어율 변경');
+  const byTime = new Map<number, string[]>();
+  for (const mark of marks) byTime.set(mark.t, [...(byTime.get(mark.t) ?? []), mark.label]);
+  return [...byTime.entries()].sort((a, b) => a[0] - b[0])
+    .map(([t, labels]) => ({ t, label: [...new Set(labels)].join(' · ') }));
+}
+
+/** 화면을 다시 그려도(덱 탭을 바꿔도) 같은 시점으로 견줄 수 있게, 마지막에 본 누적 시점을 기억한다. */
+let lastCheckpoint: number | null = null;
+
 /** peak 이상이면서 축 눈금으로 깔끔한 상한값. */
 export function niceMax(peak: number): number {
   if (peak <= 0) return 1;
@@ -253,6 +300,15 @@ class TimelineChart {
   /** 「버충 표시」 — 버스트 게이지(%) 점선. 기본은 끔이다. */
   private showGauge = false;
   private fixedYMax: number | null = null;
+  /** 누적 딜 확인 시점 — 그래프에 점선으로 긋는다. */
+  private marker: number | null = null;
+
+  setMarker(t: number | null): void {
+    // 같은 값이면 다시 그리지 않는다 — 블록을 만들 때 «시점 없음»으로 한 번 불린다.
+    if (this.marker === t) return;
+    this.marker = t;
+    this.draw();
+  }
 
   setYMax(value: number | null): void {
     this.fixedYMax = value;
@@ -816,6 +872,26 @@ class TimelineChart {
       }
     }
 
+    // 누적 딜 확인 시점 — 호박색 점선과 시각.
+    if (this.marker !== null && this.marker >= this.view0 && this.marker <= this.view1) {
+      const x = this.xFor(this.marker);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,191,60,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, top + height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,191,60,0.95)';
+      ctx.font = '800 10px ui-monospace, monospace';
+      ctx.textAlign = x > left + width - 60 ? 'right' : 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${Number(this.marker.toFixed(1))}초`, x + (ctx.textAlign === 'right' ? -4 : 4), top + 14);
+      ctx.restore();
+    }
+
     // 호버 크로스헤어 + 포인트
     if (this.hoverIndex !== null) {
       const t = (this.hoverIndex + 0.5) * this.series.bucket;
@@ -847,13 +923,19 @@ class TimelineChart {
       .map((name) => ({ name, value: this.series.damage[name]?.[index] ?? 0, color: this.series.colors[name]! }))
       .sort((a, b) => b.value - a.value);
     const total = rows.reduce((sum, row) => sum + row.value, 0);
+    // 이 칸 끝까지의 누적 — 보이는 캐릭터만 더한다(위 «합계»와 같은 기준).
+    const until = Math.min((index + 1) * this.series.bucket, this.series.duration);
+    const upTo = cumulativeAt(this.series, until);
+    const cumulative = rows.reduce((sum, row) => sum + (upTo[row.name] ?? 0), 0);
     const lines = rows.map((row) =>
       `<div class="tl-tip-row"><span class="tl-dot" style="background:${row.color}"></span>` +
       `<span class="tl-name">${row.name}</span><span class="tl-val">${formatDamage(row.value)}</span></div>`,
     ).join('');
     this.tooltip.innerHTML =
       `<div class="tl-tip-time">${formatSpan(index, this.series.bucket)}</div>${lines}` +
-      `<div class="tl-tip-total"><span>합계</span><span>${formatDamage(total)}</span></div>`;
+      `<div class="tl-tip-total"><span>합계</span><span>${formatDamage(total)}</span></div>` +
+      `<div class="tl-tip-total tl-tip-cum" data-timeline-cumulative><span>누적 0–${Number(until.toFixed(1))}초</span>` +
+      `<span>${formatDamage(cumulative)}</span></div>`;
     const host = this.canvas.parentElement!.getBoundingClientRect();
     let px = clientX - host.left + 14;
     if (px + 180 > host.width) px = clientX - host.left - 194;
@@ -1181,6 +1263,8 @@ function createSeriesBlock(
   zoomOut.addEventListener('click', () => chart.zoomBy(1.8));
   reset.addEventListener('click', () => chart.reset());
 
+  block.append(checkpointPanel(series, chart));
+
   for (const name of series.names) {
     const item = document.createElement('button');
     item.type = 'button';
@@ -1208,6 +1292,97 @@ function createSeriesBlock(
   }
 
   return block;
+}
+
+/**
+ * 누적 딜 확인 — 초를 넣거나 보스 패턴 시점을 누르면 그때까지의 누적 딜이 나오고 그래프에 점선이 선다.
+ * «이 시점에 이만큼 못 넣었으면 리트»의 기준을 잡는 자리다.
+ */
+function checkpointPanel(series: TimelineSeries, chart: TimelineChart): HTMLElement {
+  const panel = document.createElement('div');
+  panel.className = 'timeline-checkpoint';
+  panel.dataset.timelineCheckpoint = '';
+  const row = document.createElement('div');
+  row.className = 'tl-cp-row';
+  const label = document.createElement('label');
+  label.className = 'tl-cp-label';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.max = String(series.duration);
+  input.step = '0.1';
+  input.placeholder = '초';
+  input.dataset.checkpointTime = '';
+  input.setAttribute('aria-label', '누적 딜을 볼 시점(초)');
+  label.append(textSpan('누적 딜 확인', 'tl-cp-title'), input, textSpan('초까지', ''));
+  const clear = button('지우기', '누적 딜 시점 지우기');
+  clear.dataset.checkpointClear = '';
+  row.append(label, clear);
+  panel.append(row);
+
+  const marks = checkpointTimes(series);
+  if (marks.length) {
+    const chips = document.createElement('div');
+    chips.className = 'tl-cp-chips';
+    chips.append(textSpan('보스 패턴', 'tl-cp-chips-head'));
+    for (const mark of marks) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tl-cp-chip';
+      chip.dataset.checkpointAt = String(mark.t);
+      chip.textContent = `${mark.label} ${mark.t}초`;
+      chip.addEventListener('click', () => show(mark.t));
+      chips.append(chip);
+    }
+    panel.append(chips);
+  }
+
+  const result = document.createElement('div');
+  result.className = 'tl-cp-result';
+  result.dataset.checkpointResult = '';
+  panel.append(result);
+
+  const grand = series.names.reduce((sum, name) => sum + (series.totals[name] ?? 0), 0);
+  function show(t: number | null): void {
+    if (t === null || !Number.isFinite(t)) {
+      lastCheckpoint = null;
+      input.value = '';
+      chart.setMarker(null);
+      result.textContent = '초를 넣거나 보스 패턴 시점을 누르면 그때까지의 누적 딜이 나옵니다. 그래프에 마우스를 올려도 그 칸까지의 누적이 보입니다.';
+      result.classList.add('is-hint');
+      return;
+    }
+    const at = Math.max(0, Math.min(series.duration, t));
+    lastCheckpoint = at;
+    input.value = String(Number(at.toFixed(1)));
+    chart.setMarker(at);
+    const upTo = cumulativeAt(series, at);
+    const total = series.names.reduce((sum, name) => sum + (upTo[name] ?? 0), 0);
+    result.classList.remove('is-hint');
+    result.replaceChildren();
+    const head = document.createElement('p');
+    head.className = 'tl-cp-total';
+    head.append(textSpan(`0–${Number(at.toFixed(1))}초 누적`, ''),
+      textSpan(formatDamage(total), 'tl-cp-value'),
+      textSpan(grand > 0 ? `전체의 ${((total / grand) * 100).toFixed(1)}%` : '', 'tl-cp-share'));
+    result.append(head);
+    const list = document.createElement('ul');
+    list.className = 'tl-cp-list';
+    for (const name of [...series.names].sort((a, b) => (upTo[b] ?? 0) - (upTo[a] ?? 0))) {
+      const item = document.createElement('li');
+      const dot = document.createElement('span');
+      dot.className = 'tl-dot';
+      dot.style.background = series.colors[name]!;
+      item.append(dot, textSpan(name, 'tl-name'), textSpan(formatDamage(upTo[name] ?? 0), 'tl-val'));
+      list.append(item);
+    }
+    result.append(list);
+  }
+  input.addEventListener('change', () => show(input.value === '' ? null : Number(input.value)));
+  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') show(input.value === '' ? null : Number(input.value)); });
+  clear.addEventListener('click', () => show(null));
+  show(lastCheckpoint);
+  return panel;
 }
 
 function button(text: string, label: string): HTMLButtonElement {
