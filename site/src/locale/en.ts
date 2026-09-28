@@ -59,7 +59,7 @@ export const EN: Record<string, string> = {
   'Y축 상한': 'Y-axis maximum',
 
   // ── 머리·둘러보기 ──────────────────────────────────────────────────────
-  '스쿼드 계산기': 'Squad Calculator',
+  '스쿼드 계산기': 'Damage Calculator',
   '캐릭터별 오버로드와 큐브, 전투 조건을 반영해 프레임 단위 예상 대미지를 계산합니다.':
     'Per-character Overload, cubes and battle conditions, simulated frame by frame for expected damage.',
   '사용 설명서': 'Guide',
@@ -77,7 +77,6 @@ export const EN: Record<string, string> = {
   '편성 및 캐릭터 설정': 'Squad & character setup',
   '버스트 순서': 'Burst Order', 
   '이름으로 편성입력': 'Fill by Name',
-  '빠른덱편성':'Quick Team Setup',
   '렛츠도로 CSV 붙여오기': 'Paste Lets-Doro CSV',
   '블라블라링크 연동': 'Blablalink sync',
   '새 니케 추가': 'Add a NIKKE',
