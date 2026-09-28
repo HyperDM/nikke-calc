@@ -60,8 +60,8 @@ export const EN: Record<string, string> = {
 
   // ── 머리·둘러보기 ──────────────────────────────────────────────────────
   '스쿼드 계산기': 'Damage Calculator',
-  '캐릭터별 오버로드와 큐브, 전투 조건을 반영해 프레임 단위 예상 대미지를 계산합니다.':
-    'Per-character Overload, cubes and battle conditions, simulated frame by frame for expected damage.',
+  // '캐릭터별 오버로드와 큐브, 전투 조건을 반영해 프레임 단위 예상 대미지를 계산합니다.':
+    // 'Per-character Overload, Cubes and Battle Conditions, simulated frame by frame for expected damage.',
   '사용 설명서': 'Guide',
   '업데이트 내역': 'Changelog',
   '피드백': 'Feedback',
@@ -77,7 +77,7 @@ export const EN: Record<string, string> = {
   '편성 및 캐릭터 설정': 'Squad & character setup',
   '버스트 순서': 'Burst Order', 
   '이름으로 편성입력': 'Fill by Name',
-  '렛츠도로 CSV 붙여오기': 'Paste Lets-Doro CSV',
+  '렛츠도로 CSV 붙여오기': 'Paste Lets-Doro CSV',  
   '블라블라링크 연동': 'Blablalink sync',
   '새 니케 추가': 'Add a NIKKE',
   '프리셋 / 조합 공유': 'Presets / share squad',
@@ -1811,4 +1811,10 @@ export const EN: Record<string, string> = {
   '랭킹 펼치기': 'Expand ranking',
   '1위 {top}': '#1 {top}',
   '1위 {top} · 내 기록 {m}': '#1 {top} · my record {m}',
-};
+
+  // ── MISSING ENGLISH TRANSLATION ───────────────────────────────────────────────────────────────
+  '캐릭터별 오버로드와 큐브, 전투 조건을 반영해 프레임 단위 예상 대미지를 계산합니다.':
+    'Frame-by-frame Damage Simulation, with a Per-Character Summary of Overload, Cubes and Conditions.',
+  '빠른덱편성': 'Quick Team Setup', 
+  
+  };
