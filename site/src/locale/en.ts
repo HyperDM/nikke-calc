@@ -75,8 +75,9 @@ export const EN: Record<string, string> = {
 
   // ── 편성 ───────────────────────────────────────────────────────────────
   '편성 및 캐릭터 설정': 'Squad & character setup',
-  '버스트 순서': 'Burst order',
-  '이름으로 편성입력': 'Fill by name',
+  '버스트 순서': 'Burst Order', 
+  '이름으로 편성입력': 'Fill by Name',
+  '빠른덱편성':'Quick Team Setup',
   '렛츠도로 CSV 붙여오기': 'Paste Lets-Doro CSV',
   '블라블라링크 연동': 'Blablalink sync',
   '새 니케 추가': 'Add a NIKKE',
@@ -1491,7 +1492,7 @@ export const EN: Record<string, string> = {
   '계산 실패': 'Calculation failed',
 
   // ── Document title ──
-  'NIKKE 스쿼드 계산기': 'NIKKE Squad Calculator',
+  'NIKKE 스쿼드 계산기': 'NIKKE Damage Calculator',
 
   // ── Composed lines ──
   '전투력 {n}': 'Power {n}',
