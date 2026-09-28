@@ -1421,7 +1421,7 @@ export const EN: Record<string, string> = {
   '스킬 히트': 'Skill hits',
   '지분(%)': 'Share (%)',
   '스쿼드 합계': 'Squad total',
-  'NIKKE 스쿼드 계산기 · 정밀 수치': 'NIKKE Squad Calculator · detailed numbers',
+  'NIKKE 스쿼드 계산기 · 정밀 수치': 'NIKKE Damage Calculator · detailed numbers',
   '전투 시간(초)': 'Battle length (s)',
   '총 히트': 'Total hits',
   '조건': 'Setup',
