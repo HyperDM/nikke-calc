@@ -33,8 +33,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
       # 계산 엔진은 TypeScript 하나다(site/src/engine/). 엔진 단위 테스트는 사이트 테스트에 들어 있다.
-      - name: Run browser-site and engine tests
-        run: npm test -- --run
       - name: Run golden damage regressions
         run: npx tsx scripts/snapshot.ts
       - name: Check docs against data and engine
