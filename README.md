@@ -1,35 +1,47 @@
-# NIKKE 스쿼드 계산기
+# NIKKE Damage Calculator
 
-기존 Python 시뮬레이션 엔진을 웹 브라우저 안에서 실행하는 정적 스쿼드 대미지 계산기입니다.
+A Static Squad Damage Calculator that runs the existing Python simulation engine inside a web browser.
 
-서비스: <https://moris-kr.github.io/nikke-calc/>
+Hyper's Implementation: <https://HyperDM.github.io/nikke-calc/>
 
-원본 계산 엔진: <https://github.com/Jgaram/nikke-calc>
+Original Fork: <https://moris-kr.github.io/nikke-calc/>
 
-## AI 에이전트 연결 (MCP)
+Based on: <https://github.com/Jgaram/nikke-calc>
 
-ChatGPT·Claude에 공개 MCP 주소 `https://nikke-calc-mcp.onrender.com/mcp`를 등록한 뒤,
-계산기의 **편의 기능 → MCP → AI 연결**에서 받은 연결 코드를 전달하세요.
-AI가 요청하면 **열어 둔 계산기 브라우저가 계산**하고, Render는 입력과 결과를 중계합니다.
-조회·계산 요청은 작업 ID를 먼저 반환하며 AI가 완료 결과를 따로 확인합니다.
-탭과 기기를 깨워 두어야 하며 연결은 2시간, 완료 결과 보관은 5분입니다.
+## AI Agent Connection (MCP)
+Register the public MCP address https://nikke-calc-mcp.onrender.com/mcp in ChatGPT or Claude.
 
-연결 코드를 아는 사람은 전체 육성·덱을 읽고 계산할 수 있으므로 공개하지 마세요.
-사용 후 연결을 해제하면 권한이 취소됩니다. 닉네임·계정 ID·쿠키는 공유 데이터에 포함하지 않습니다.
-육성·편성·계산 결과는 AI 서비스와 중계 서버를 거치며, 중계 서버는 메모리에 임시 보관합니다.
+In the calculator’s Convenience Features → MCP → AI Connection, enter the connection code you received.
 
-**[설치·연결 튜토리얼](docs/MCP_SETUP.md)**에서 ChatGPT/Claude와 브라우저 연결 방법을 확인하세요.
-로컬 stdio MCP(`nikke_mcp/`, Node.js 22 이상)는 PC에서 사이트와 같은 TypeScript 엔진으로 계산합니다. 공개 중계 서버에 계산을 대신 실행하는 기능은 없습니다.
+When the AI makes a request, the open calculator browser performs the calculation, and Render relays the input and output.
 
-## 구조
+Query/calculation requests first return a task ID, and the AI checks the completed result separately.
 
-- `calculator/`, `context/`, `data/`: 계산 엔진과 원본 데이터
-- `site/`: Vite와 TypeScript로 만든 정적 웹 애플리케이션
-- `site/public/calculator.worker.js`: 계산을 UI와 분리해 순차 실행하는 Web Worker
-- `site/pybridge/bridge.py`: 웹 요청을 기존 Python 엔진 호출로 변환하는 브리지
-- `site/scripts/sync-runtime.mjs`: 엔진, 데이터, 캐릭터 목록과 이미지를 웹 런타임으로 동기화
-- `worker/`: 블라블라링크 조회 프록시 (Cloudflare Workers). 사이트와 따로 배포합니다
-- `.github/workflows/pages.yml`: 테스트, 빌드, GitHub Pages 배포 자동화
+Keep your tab and device awake. Connections last 2 hours, and completed results are stored for 5 minutes.
+
+⚠️ Anyone who knows the connection code can read and calculate your entire squad setup, so do not share it.
+After use, disconnect to revoke permissions. Nicknames, account IDs, and cookies are not included in shared data.
+Squad growth, formations, and calculation results pass through the AI service and the relay server, which temporarily stores them in memory.
+
+See the [docs/MCP_SETUP.md] for instructions on connecting ChatGPT/Claude with your browser.
+Local stdio MCP (nikke_mcp/, Node.js 22+) calculates using the same TypeScript engine as the site, directly on your PC.
+The public relay server does not provide a feature to execute calculations on your behalf. 
+
+## Structure
+
+calculator/, context/, data/: Calculation engine and original data
+
+site/: Static web application built with Vite and TypeScript
+
+site/public/calculator.worker.js: Web Worker that separates UI from sequential calculation execution
+
+site/pybridge/bridge.py: Bridge that converts web requests into Python engine calls
+
+site/scripts/sync-runtime.mjs: Synchronizes engine, data, character list, and images with the web runtime
+
+worker/: BlablaLink query proxy (Cloudflare Workers), deployed separately from the site
+
+.github/workflows/pages.yml: Automated testing, build, and GitHub Pages deployment
 
 ## 주요 기능
 
