@@ -1815,6 +1815,7 @@ export const EN: Record<string, string> = {
   // ── MISSING ENGLISH TRANSLATION ───────────────────────────────────────────────────────────────
   '캐릭터별 오버로드와 큐브, 전투 조건을 반영해 프레임 단위 예상 대미지를 계산합니다.':
     'Frame-by-frame Damage Simulation, with a Per-Character Summary of Overload, Cubes and Conditions.',
-  '빠른덱편성': 'Quick Team Setup', 
+  '빠른덱편성': 'Quick Team Setup',
+  '덱 대미지부터 오버로드 모듈 기대값, 스킬 재료와 픽업 이력까지 필요한 기능의 사용법을 확인하세요.': 'Check how to use each feature, from Team Damage to Overload Module Expectations, Skill Materials, and Banner history.',
   
   };
