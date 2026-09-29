@@ -1,5 +1,5 @@
-// dev 전용 미리보기. 실제 `share-panel` 모듈을 가짜 서버에 물려 눈으로 확인한다.
-// 빌드 대상이 아니다(vite는 index.html만 빌드한다).
+// Dev-only preview. The actual `share-panel` module is hooked up to a fake server for visual checking.
+// Not a build target (vite only builds index.html).
 import { mountSharePanel } from './src/share-panel';
 import type { ShareItem, ShareServer } from './src/share-server';
 
