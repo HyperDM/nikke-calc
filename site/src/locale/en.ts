@@ -1815,7 +1815,25 @@ export const EN: Record<string, string> = {
   // ── MISSING ENGLISH TRANSLATION ───────────────────────────────────────────────────────────────
   '캐릭터별 오버로드와 큐브, 전투 조건을 반영해 프레임 단위 예상 대미지를 계산합니다.':
     'Frame-by-frame Damage Simulation, with a Per-Character Summary of Overload, Cubes and Conditions.',
+  '기본': 'Default',
   '빠른덱편성': 'Quick Team Setup',
+  '단일덱 모드': 'Single Team',
+  '+ 덱 추가': 'Add New Team',
+  '현재 덱 삭제': 'Delete Team',
+  '전체 덱 비우기': 'Clear All Teams',
+  '덱 1': 'Team 1',
+  '덱 2': 'Team 2',
+  '덱 3': 'Team 3',
+  '덱 4': 'Team 4',
+  '덱 5': 'Team 5',
+  '첫 버스트 3초': 'First Burst at 3s.',
+  '샷건 탄착군 직경 360': 'Shotgun Pellet Spread Diameter: 360',
+  '장탄 표시': 'Ammo Display',
+  '버충 표시': 'Burst Gauge Display',
+  '드래그 이동': 'Drag to Move',
+  '휠/버튼 확대·축소': 'Zoom In/Out with Scroll Wheel',
+  '노란 밴드 = 풀버스트': 'Yellow Bar=Full Burst',
+  '초를 넣거나 보스 패턴 시점을 누르면 그때까지의 누적 딜이 나옵니다. 그래프에 마우스를 올려도 그 칸까지의 누적이 보입니다.': 'Enter a timestamp in seconds to see the cumulative damage up to that moment. Hovering over the graph also displays the cumulative damage up to that point.',
   '덱 대미지부터 오버로드 모듈 기대값, 스킬 재료와 픽업 이력까지 필요한 기능의 사용법을 확인하세요.': 'Check how to use each feature, from Team Damage to Overload Module Expectations, Skill Materials, and Banner history.',
   
   };
