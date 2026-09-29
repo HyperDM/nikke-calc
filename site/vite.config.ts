@@ -3,12 +3,12 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// 빌드마다 바뀌는 ID. calculator.worker.js는 해시가 없는 public 자산이라
-// 이 값을 쿼리로 붙여 새 배포 때 옛 워커가 캐시에서 재사용되지 않게 한다.
+// ID that changes with each build. Since calculator.worker.js is a public asset without a hash,
+// this value is appended as a query so that the old worker isn’t reused from cache after a new deployment.
 const buildId = JSON.stringify(Date.now().toString(36));
 
-// 계산 엔진(src/engine/) 소스의 해시. 저장해 둔 계산 결과의 키에 들어간다 — 엔진이 바뀌면
-// 예전 결과를 다시 쓰지 않게(빌드 ID는 배포마다 바뀌어 캐시를 매번 버리므로 쓰지 않는다).
+// Hash of the calculation engine (src/engine/) source. It’s included in the key for stored calculation results — so if the engine changes,
+// old results won’t be reused. (The build ID changes with each deployment and always clears the cache, so it isn’t used here.)
 const engineDir = join(import.meta.dirname, 'src', 'engine');
 const engineHash = createHash('sha256');
 for (const file of readdirSync(engineDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')).sort()) {
@@ -24,15 +24,14 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    /**
-     * 한 시험의 상한(ms). 기본 5초는 **이 저장소에는 짧다** — `ui.test.ts`는 시험마다
-     * 계산기 화면을 통째로 세우고(니케 200명·판 수십 개) 백 개 넘는 시험이 잇따라 도는데,
-     * CI 기계는 개발 기계보다 서너 배 느리다. 그래서 「느린 시험 하나에 20초를 준다」를
-     * 시험마다 적는 일이 세 번 반복됐고, 그때마다 배포가 한 번씩 막혔다.
-     *
-     * 여기서 한 번에 올린다. 상한을 올리는 것이 느린 시험을 빠르게 만들지는 않지만,
-     * **멈춘 시험**은 여전히 20초에 걸려 잡힌다 — 그것이 상한이 하는 일이다.
-     */
+  /**
+ * Upper limit (ms) for a single test. The default 5 seconds is **too short for this repository** — in `ui.test.ts`,
+ * each test spins up the entire calculator screen (200 Nikke characters, dozens of panels), and then runs over a hundred tests in succession.
+ * CI machines are three to four times slower than development machines. As a result, the note
+ * “give 20 seconds to one slow test” had to be added three separate times, and each time deployment was blocked.
+ *
+ * So we raise it here all at once. Increasing the limit doesn’t make slow tests faster.
+ */
     testTimeout: 20_000,
   },
 });
