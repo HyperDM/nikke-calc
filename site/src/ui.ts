@@ -142,14 +142,14 @@ const DEFAULT_SQUAD = ['리타', '크라운', '라피 : 레드 후드', '앨리�
 export interface CalculatorClientLike {
   prepare(): Promise<void>;
   simulate(request: SimulationRequest): Promise<SimulationResult>;
-  /** 목록 정렬용 전투력. 없는 구현(테스트 대역)도 있어 선택으로 둔다. */
+/** Combat power used for list sorting. Some implementations (test doubles) don’t have it, so it’s optional. */
   combatPower?(request: CombatPowerRequest): Promise<Record<string, number>>;
-  /**
-   * 돌고 있는 계산을 끊는다. 작업 스레드를 통째로 죽이고 새로 세우므로 **다음 계산은
-   * 준비부터** 시작한다. 풀이 아닌 구현(시험 대역)도 있어 선택으로 둔다.
-   */
+ /**
+ * Interrupts the ongoing calculation. It kills the entire worker thread and starts a new one, so **the next calculation begins from setup**.
+ * Some implementations (test doubles) are not actual solvers, so this is optional.
+ */
   cancel?(): void;
-  /** 병렬 계산. 풀이 아닌 구현(테스트 대역·워커 하나)도 있어 전부 선택으로 둔다. */
+/** Parallel calculation. Some implementations (test doubles or a single worker) are not actual solvers, so all of these are optional. */
   setPoolSize?(size: number): void;
   defaultPoolSize?(): number;
   maxPoolSize?: number;
@@ -163,10 +163,10 @@ interface CalculatorDependencies {
   version: string;
   client: CalculatorClientLike;
   storage: StorageSource;
-  // 완전 초기화는 저장소를 비운 뒤 페이지를 다시 띄워 메모리 상태까지 확실히
-  // 되돌린다. 테스트에서는 이 자리에 가짜 함수를 넣는다.
+// Full reset clears the storage and reloads the page to ensure even the memory state is restored.
+// In tests, a fake function is inserted here instead.
   reload?: () => void;
-  /** 테스트·자체 호스팅에서 빌드 환경값 대신 쓸 BlablaLink 프록시 주소. */
+/** BlablaLink proxy address to use instead of build environment values in tests or self‑hosting. */
   blablaProxy?: string;
 }
 
@@ -183,15 +183,15 @@ const createText = (tag: keyof HTMLElementTagNameMap, value: string, className?:
   return node;
 };
 
-// 속성(코드) 아이콘 — 그림은 `image/icon/icon-code-*.png`가 정본이다.
-// 직접 추가한 니케가 목록에 없는 코드를 쓰면 조용히 아이콘을 생략한다.
+// Attribute (code) icons — the images in `image/icon/icon-code-*.png` are the originals.
+// If a directly added Nikke uses a code not in the list, the icon is quietly omitted.
 const ELEMENT_ICON: Record<string, string> = {
   작열: 'fire', 수냉: 'water', 풍압: 'wind', 전격: 'electronic', 철갑: 'iron',
 };
 
-/** 코드 다섯. 인게임 표기 순서 그대로 — 필터 아이콘이 이 순서로 선다. */
+/** The five codes. In‑game display order exactly — filter icons are arranged in this order. */
 const ELEMENT_CODES = Object.keys(ELEMENT_ICON);
-/** 코어 직경 아래 코어 명중률을 보이는 무기군. SR·RL은 탄착군이 코어보다 작아 늘 100%라 뺀다. */
+/** Weapon groups that show core hit rate below core diameter. For SR and RL, the shot spread is smaller than the core, so it’s always 100% and omitted. */
 const CORE_CHANCE_WEAPONS = ['MG', 'AR', 'SMG'];
 
 const createElementIcon = (elementCode: string, className: string): HTMLElement | null => {
@@ -204,7 +204,7 @@ const createElementIcon = (elementCode: string, className: string): HTMLElement 
   return icon;
 };
 
-// Pyodide 오류는 긴 파이썬 트레이스백으로 온다. 마지막 줄(실제 오류 메시지)만 보여준다.
+// Pyodide errors come with long Python tracebacks. Only the last line (the actual error message) is shown.
 const cleanEngineError = (raw: string): string => {
   const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
   const last = lines[lines.length - 1] ?? raw;
@@ -224,7 +224,7 @@ const emptyDeck = (id: number): DeckState => ({
   characters: {},
 });
 
-/** 딜 1·2위 이름. 순서는 그대로 두고 «표시»만 얹기 위해 이름만 뽑는다. */
+/** Names of the top 1st and 2nd damage dealers. Only the names are extracted, so the order stays the same and just the «marker» is added. */
 function topScorers(entry: DeckResultEntry): Map<string, number> {
   const ranked = [...new Set(entry.request.squad)]
     .map((name) => [name, entry.result.charTotals[name] ?? 0] as const)
@@ -234,11 +234,11 @@ function topScorers(entry: DeckResultEntry): Map<string, number> {
 }
 
 /**
- * 캐릭터별 결과 줄. 초상화 오른쪽에 막대와 총딜이 선다 — 덱을 갈아 가며 볼 때는
- * 카드보다 이쪽이 짧고, 막대 길이로 «누가 캐리했나»가 곧바로 읽힌다.
- * 여기서도 **편성 순서 그대로**이고, 딜 1·2위는 뱃지와 테두리로만 표시한다.
+ * Result row per character. To the right of the portrait, a bar and total damage are shown — when switching teams,
+ * this is shorter than the card view, and the bar length makes it easy to read «who carried».
+ * The order here is also **exactly the squad order**, and the top 1st and 2nd damage dealers are indicated only with badge and border.
  */
-/** 대미지를 어떻게 적을지. 「자세히 보기」로 갈린다 — 값이 아니라 표기만 바뀐다. */
+/** How to display damage. Split by “View details” — the values stay the same, only the notation changes. */
 interface DamageFormat {
   dmg(value: number): string;
   dps(value: number): string;
