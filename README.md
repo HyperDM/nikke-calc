@@ -45,15 +45,15 @@ worker/: BlablaLink query proxy (Cloudflare Workers), deployed separately from t
 
 ## Main Features
 
-·Per-Character Overload Lines· Harmony Cubes (17 types) · Collectibles/Favorites · Skill Levels · Limit Breaks · Individual Control Cettings.
-·Account Console Settings — apply Affection, Class and Manufacturer Console Values to all squad members.
-·5-team mode and deck copy — duplicate one team’s formation and settings into another, then swap only the DPS unit for comparison.
-·Per-character normal/skill damage breakdown — shows contribution ratios, normal attack vs skill damage proportions, and skill-specific damage/hit counts.
-·Frame-level combat timeline graph.
-·Export Detailed Reports as Images — generate results as a single PNG for copy or save (1-deck as vertical card, 5-deck as combined totals + 25 individual damages in one image).
-·Burst gauge charge time adjustment — manually input fixed times instead of cumulative gauge to tune cycles.
-·Import CSV from Let’sdoro and sync BlablaLink profiles to reflect actual growth state.
-·Share squads via link/code, save formation presets, and compare deck rankings.
+    · Per-Character Overload Lines· Harmony Cubes (17 types) · Collectibles/Favorites · Skill Levels · Limit Breaks · Individual Control Cettings.
+    · Account Console Settings — apply Affection, Class and Manufacturer Console Values to all squad members.
+    · 5-team mode and deck copy — duplicate one team’s formation and settings into another, then swap only the DPS unit for comparison.
+    · Per-character normal/skill damage breakdown — shows contribution ratios, normal attack vs skill damage proportions, and skill-specific damage/hit counts.
+    · Frame-level combat timeline graph.
+    · Export Detailed Reports as Images — generate results as a single PNG for copy or save (1-deck as vertical card, 5-deck as combined totals + 25 individual damages in one image).
+    · Burst gauge charge time adjustment — manually input fixed times instead of cumulative gauge to tune cycles.
+    · Import CSV from Let’sdoro and sync BlablaLink profiles to reflect actual growth state.
+    · Share squads via link/code, save formation presets, and compare deck rankings.
 
 In the web version, the fixed Pyodide runs the Python engine inside a Web Worker. Standard web calculations run directly in the browser. If the optional AI connection is enabled, growth, formations, and calculation results pass through the AI service and Render relay server. Result cache is stored in the browser’s localStorage (up to 30 entries).
 Currently, the selection list includes only real characters present in both data/parsed_nikke.json and data/parsed_skills.json. test_ data is excluded, and preview characters display a warning that their data is unverified. As of the current sync, 202 characters are supported.
