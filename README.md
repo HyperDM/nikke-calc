@@ -101,7 +101,8 @@ npm run sync-runtime
 npm run check-runtime
 ```
 
-`npm run dev`와 `npm run build`도 실행 전에 자동으로 런타임을 동기화합니다.
+`npm run dev` and  `npm run build` automatically synchronize the runtime before execution.
+
 
 ## Deployment
 
